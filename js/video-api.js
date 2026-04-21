@@ -38,6 +38,7 @@ let videoApiSelectedAsset = null;
 let selectedSourceVideoId = null;
 let selectedCharacterId = null;
 let sessionVideoSources = [];
+let videoApiGlobalKeyHandlerBound = false;
 
 if (!window.sessionUsage) {
   window.sessionUsage = {};
@@ -69,8 +70,12 @@ function saveVideoApiSettings(settings) {
     ...settings
   };
 
-  localStorage.setItem(VIDEO_SETTINGS_KEY, JSON.stringify(next));
-  localStorage.setItem(VIDEO_ENABLED_KEY, next.enabled ? "true" : "false");
+  try {
+    localStorage.setItem(VIDEO_SETTINGS_KEY, JSON.stringify(next));
+    localStorage.setItem(VIDEO_ENABLED_KEY, next.enabled ? "true" : "false");
+  } catch (err) {
+    console.warn("Video API Einstellungen konnten nicht gespeichert werden:", err);
+  }
 
   window.videoApiSettings = next;
   updateVideoApiButtonState();
@@ -79,7 +84,8 @@ function saveVideoApiSettings(settings) {
 }
 
 function isVideoApiEnabled() {
-  return true;
+  const settings = window.videoApiSettings || getVideoApiSettings();
+  return !!settings.enabled;
 }
 
 function updateVideoApiStatusPill() {}
@@ -96,10 +102,15 @@ function updateVideoStartButtonLabel() {
     window.videoApiSettings?.mode ||
     VIDEO_DEFAULT_SETTINGS.mode;
 
+  const labelsByMode = {
+    create: "Video Generierung Starten",
+    edit: "Video Bearbeiten",
+    extend: "Video Erweitern",
+    character: "Character Erstellen"
+  };
+
   startBtn.textContent =
-    mode === "character"
-      ? "Character Erstellen"
-      : "Video Generierung Starten";
+    labelsByMode[mode] || labelsByMode.create;
 }
 
 function applyVideoApiSettingsToUi(settings) {
@@ -422,7 +433,7 @@ function openVideoApiModal() {
 
 //selectedSourceVideoId = getLastCompletedVideoId();
 //selectedCharacterId = getLastCharacterId();
-selectedSourceVideoId = null;
+selectedSourceVideoId = getLastCompletedVideoId();
 selectedCharacterId = getLastCharacterId();
 renderVideoSourceLists();
 
@@ -533,7 +544,11 @@ function readVideoSourceList(storageKey) {
 }
 
 function writeVideoSourceList(storageKey, list) {
-  localStorage.setItem(storageKey, JSON.stringify(Array.isArray(list) ? list : []));
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(Array.isArray(list) ? list : []));
+  } catch (err) {
+    console.warn("Video-Quellen konnten nicht gespeichert werden:", err);
+  }
 }
 
 function getSavedVideoSources() {
@@ -970,7 +985,7 @@ async function createVideoEditJob(userPrompt, overrideOptions = {}) {
     video: { id: sourceVideoId }
   };
 
-  return fetchVideoApiJson(
+  const data = await fetchVideoApiJson(
     "https://api.openai.com/v1/videos/edits",
     {
       method: "POST",
@@ -978,6 +993,12 @@ async function createVideoEditJob(userPrompt, overrideOptions = {}) {
       body: JSON.stringify(payload)
     }
   );
+
+  if (!data?.id) {
+    throw new Error("Video-Edit konnte nicht gestartet werden: keine Job-ID erhalten.");
+  }
+
+  return data;
 }
 
 async function createVideoExtensionJob(userPrompt, overrideOptions = {}) {
@@ -1002,7 +1023,7 @@ async function createVideoExtensionJob(userPrompt, overrideOptions = {}) {
     video: { id: sourceVideoId }
   };
 
-  return fetchVideoApiJson(
+  const data = await fetchVideoApiJson(
     "https://api.openai.com/v1/videos/extensions",
     {
       method: "POST",
@@ -1010,6 +1031,12 @@ async function createVideoExtensionJob(userPrompt, overrideOptions = {}) {
       body: JSON.stringify(payload)
     }
   );
+
+  if (!data?.id) {
+    throw new Error("Video-Extension konnte nicht gestartet werden: keine Job-ID erhalten.");
+  }
+
+  return data;
 }
 
 async function createVideoCharacter(userPrompt = "", overrideOptions = {}) {
@@ -1681,27 +1708,30 @@ if (overlay && overlay.dataset.videoApiBound !== "true") {
   overlay.dataset.videoApiBound = "true";
 }
 
-document.addEventListener("keydown", (e) => {
-  const isOpen = overlay && overlay.hidden === false;
-  if (!isOpen) return;
+if (!videoApiGlobalKeyHandlerBound) {
+  videoApiGlobalKeyHandlerBound = true;
+  document.addEventListener("keydown", (e) => {
+    const isOpen = overlay && overlay.hidden === false;
+    if (!isOpen) return;
 
-  if (e.key === "Escape") {
-    e.preventDefault();
-    document.getElementById("videoApiFooterCloseBtn")?.click();
-    return;
-  }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      document.getElementById("videoApiFooterCloseBtn")?.click();
+      return;
+    }
 
-  if (e.key === "Enter") {
-    const tag = (document.activeElement?.tagName || "").toLowerCase();
-    const isTextarea = tag === "textarea";
-    const isButton = tag === "button";
+    if (e.key === "Enter") {
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      const isTextarea = tag === "textarea";
+      const isButton = tag === "button";
 
-    if (isTextarea || isButton) return;
+      if (isTextarea || isButton) return;
 
-    e.preventDefault();
-    document.getElementById("videoApiSaveBtn")?.click();
-  }
-});
+      e.preventDefault();
+      document.getElementById("videoApiSaveBtn")?.click();
+    }
+  });
+}
 
   updateVideoApiButtonState();
   setVideoTestBusy(false);
@@ -1760,7 +1790,7 @@ updateVideoAssetInfoUi();
 updateVideoStartButtonLabel();
 //selectedSourceVideoId = getLastCompletedVideoId();
 //selectedCharacterId = getLastCharacterId();
-selectedSourceVideoId = null;
+selectedSourceVideoId = getLastCompletedVideoId();
 selectedCharacterId = getLastCharacterId();
 sessionVideoSources = [];
 renderVideoSourceLists();

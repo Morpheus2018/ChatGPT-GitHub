@@ -161,6 +161,15 @@ function getGreetingText() {
 
 const STREAM_KEY = 'stream_enabled';
 
+function safeJsonParse(value, fallback = null) {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function isStreamEnabled() {
   const saved = localStorage.getItem(STREAM_KEY);
   return saved === null ? true : saved === 'true'; // default = AN
@@ -185,7 +194,7 @@ function restoreUsage() {
   const saved = localStorage.getItem(USAGE_KEY);
   if (!saved) return;
   try {
-    const parsed = JSON.parse(saved);
+    const parsed = safeJsonParse(saved, {});
     Object.assign(window.sessionUsage, parsed);
 
     // Safety für alte Daten
@@ -257,7 +266,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (saved) {
     try {
-      const history = JSON.parse(saved);
+      const history = safeJsonParse(saved, []);
 
       if (Array.isArray(history) && history.length) {
 
@@ -537,6 +546,7 @@ let suppressAutoScroll = false;
 function scrollToBottom() {
 
   if (suppressAutoScroll) return;
+  if (!messages?.parentElement) return;
 
   messages.parentElement.scrollTop =
     messages.parentElement.scrollHeight;
@@ -711,8 +721,10 @@ timestamp: timeEl?.dataset.timestamp || null,
    ========================================================= */
 function setApiStatus(state) {
   const statusEl = document.getElementById('status');
+  if (!statusEl) return;
   const textEl = statusEl.querySelector('.api-text');
   const iconEl = statusEl.querySelector('i');
+  if (!textEl || !iconEl) return;
 
   statusEl.classList.remove('api-idle', 'api-online', 'api-error');
 
@@ -743,7 +755,7 @@ function setApiStatus(state) {
    Status-Sync mit API-Konfiguration
    ========================================================= */
 function syncStatusWithApiConfig() {
-  if (typeof getApiConfig !== 'function') return;
+  if (typeof getApiConfig !== 'function' || !status) return;
 
   const api = getApiConfig();
   status.classList.remove('api-demo');
@@ -770,6 +782,7 @@ window.addEventListener('api-mode-changed', () => {
    Textarea
    ========================================================= */
 function resizeTextarea() {
+  if (!userInput) return;
   userInput.style.height = 'auto';
   const maxHeight = parseFloat(getComputedStyle(userInput).maxHeight);
 
@@ -786,6 +799,7 @@ function resizeTextarea() {
    Events
    ========================================================= */
 
+if (sendBtn && userInput) {
 sendBtn.onclick = async () => {
 
   const text = userInput.value.trim();
@@ -858,10 +872,12 @@ catch (err) {
   addMessage('bot', '❌ Fehler: ' + (err?.message || err));
 }
 };
+}
 
 /* =========================================================
    ENTER KEY SUPPORT
    ========================================================= */
+if (userInput && sendBtn) {
 userInput.addEventListener('input',resizeTextarea);
 userInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -870,6 +886,7 @@ userInput.addEventListener('keydown', e => {
     }
   }
 );
+}
 
 /* =========================================================
    Custom Confirm Modal
@@ -959,6 +976,7 @@ function customConfirm(message, options = {}) {
 /* =========================================================
    Clear Chat
    ========================================================= */
+if (clearBtn) {
 clearBtn.onclick = async () => {
   // ✅ Löschen erlauben, wenn es irgendeine Nachricht gibt, die NICHT die Begrüßung ist
   const hasAnythingToClear =
@@ -996,6 +1014,7 @@ clearBtn.onclick = async () => {
   resizeTextarea();
   scrollToBottom();
 };
+}
 
 /* =========================================================
    Theme
@@ -1004,19 +1023,23 @@ const themeBtn = document.getElementById("pageThemeToggle");
 
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
+  if (!themeBtn) return;
   const icon = themeBtn.querySelector("i");
+  if (!icon) return;
   icon.className = theme === "dark" ? "fas fa-sun" : "fas fa-moon";
 }
 
 const savedTheme = localStorage.getItem("theme") || "dark";
 applyTheme(savedTheme);
 
-themeBtn.onclick = () => {
-  const current = document.documentElement.getAttribute("data-theme");
-  const next = current === "dark" ? "light" : "dark";
-  applyTheme(next);
-  localStorage.setItem("theme", next);
-};
+if (themeBtn) {
+  themeBtn.onclick = () => {
+    const current = document.documentElement.getAttribute("data-theme");
+    const next = current === "dark" ? "light" : "dark";
+    applyTheme(next);
+    localStorage.setItem("theme", next);
+  };
+}
 
 if (typeof modelSelect !== 'undefined' && modelSelect) {
   modelSelect.addEventListener('change', () => {
@@ -1698,4 +1721,3 @@ function extractTextFromResponse(data) {
   }
   return result.trim();
 }
-
